@@ -1,18 +1,20 @@
-name: Build MR7 Momaredi APK
+name: MR7 Momaredi APK Build
 
 on:
+  workflow_dispatch:
   push:
     paths:
       - 'mr7-ممرّضي.zip'
       - '.github/workflows/build-apk.yml'
-  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
   build:
+    name: Build Android APK
     runs-on: ubuntu-latest
+    timeout-minutes: 45
 
     steps:
       - name: Checkout repository
@@ -24,31 +26,67 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Install Android SDK
+      - name: Locate Android SDK
+        shell: bash
         run: |
-          SDK="$ANDROID_HOME"
-          SDKMANAGER=$(find "$SDK/cmdline-tools" -name sdkmanager -type f | head -n 1)
+          echo "ANDROID_HOME=${ANDROID_HOME:-$ANDROID_SDK_ROOT}" >> "$GITHUB_ENV"
+          test -d "${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+
+      - name: Install Android SDK packages
+        shell: bash
+        run: |
+          SDK_ROOT="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          SDKMANAGER="$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager | head -n 1)"
+          test -n "$SDKMANAGER"
           yes | "$SDKMANAGER" --licenses
-          "$SDKMANAGER" --install "platform-tools" "platforms;android-36-ext1" "build-tools;36.0.0"
+          "$SDKMANAGER" --install \
+            "platform-tools" \
+            "platforms;android-36" \
+            "build-tools;36.0.0"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.3.1'
 
-      - name: Extract project
+      - name: Extract Android project
+        shell: bash
         run: |
-          mkdir project
-          unzip -q 'mr7-ممرّضي.zip' -d project
+          mkdir -p project
+          unzip -q "mr7-ممرّضي.zip" -d project
           test -f project/settings.gradle.kts
           test -f project/app/build.gradle.kts
 
-      - name: Build APK
-        run: gradle -p project assembleDebug --stacktrace
+      - name: Create debug signing key
+        shell: bash
+        run: |
+          keytool -genkeypair -v \
+            -keystore project/debug.keystore \
+            -storepass android \
+            -keypass android \
+            -alias androiddebugkey \
+            -dname "CN=Android Debug,O=Android,C=US" \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000
+
+      - name: Build debug APK
+        shell: bash
+        run: |
+          gradle -p project assembleDebug --no-daemon --stacktrace
+
+      - name: Verify APK
+        shell: bash
+        run: |
+          APK="$(find project/app/build/outputs/apk/debug -maxdepth 1 -type f -name '*.apk' | head -n 1)"
+          test -n "$APK"
+          echo "APK_PATH=$APK" >> "$GITHUB_ENV"
+          ls -lh "$APK"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: MR7-Momaredi-APK
-          path: project/app/build/outputs/apk/debug/*.apk
+          path: ${{ env.APK_PATH }}
           if-no-files-found: error
+          retention-days: 14
