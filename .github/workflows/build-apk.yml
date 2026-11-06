@@ -63,21 +63,34 @@ jobs:
           test -f project/settings.gradle.kts
           test -f project/app/build.gradle.kts
 
-      - name: Inject Gemini build secret
+      - name: Inject Gemini service secrets
         shell: bash
         env:
+          GEMINI_MR7_MEDICAL_API_KEY: ${{ secrets.GEMINI_MR7_MEDICAL_API_KEY }}
+          GEMINI_MR7_ALLERGY_API_KEY: ${{ secrets.GEMINI_MR7_ALLERGY_API_KEY }}
           GEMINI_MR7_VERSION_API_KEY: ${{ secrets.GEMINI_MR7_VERSION_API_KEY }}
         run: |
           set -euo pipefail
-          if [[ -z "${GEMINI_MR7_VERSION_API_KEY:-}" ]]; then
-            echo "::error::Missing repository secret GEMINI_MR7_VERSION_API_KEY."
-            exit 1
-          fi
+
+          for key_name in \
+            GEMINI_MR7_MEDICAL_API_KEY \
+            GEMINI_MR7_ALLERGY_API_KEY \
+            GEMINI_MR7_VERSION_API_KEY; do
+            if [[ -z "${!key_name:-}" ]]; then
+              echo "::error::Missing repository secret: $key_name"
+              exit 1
+            fi
+          done
 
           umask 077
-          printf 'GEMINI_MR7_VERSION_API_KEY=%s\n' "$GEMINI_MR7_VERSION_API_KEY" > project/.env
-          printf 'GEMINI_MR7_VERSION_API_=%s\n' "$GEMINI_MR7_VERSION_API_KEY" >> project/.env
-          printf 'GEMINI_API_KEY=%s\n' "$GEMINI_MR7_VERSION_API_KEY" >> project/.env
+          {
+            printf 'GEMINI_MR7_MEDICAL_API_KEY=%s\n' "$GEMINI_MR7_MEDICAL_API_KEY"
+            printf 'GEMINI_MR7_ALLERGY_API_KEY=%s\n' "$GEMINI_MR7_ALLERGY_API_KEY"
+            printf 'GEMINI_MR7_VERSION_API_KEY=%s\n' "$GEMINI_MR7_VERSION_API_KEY"
+            printf 'GEMINI_MR7_VERSION_API_=%s\n' "$GEMINI_MR7_VERSION_API_KEY"
+            printf 'GEMINI_API_KEY=%s\n' "$GEMINI_MR7_VERSION_API_KEY"
+          } > project/.env
+
           chmod 600 project/.env
 
       - name: Create debug signing key
@@ -113,3 +126,4 @@ jobs:
           path: ${{ env.APK_PATH }}
           if-no-files-found: error
           retention-days: 14
+          
