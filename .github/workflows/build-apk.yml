@@ -63,6 +63,23 @@ jobs:
           test -f project/settings.gradle.kts
           test -f project/app/build.gradle.kts
 
+      - name: Inject Gemini build secret
+        shell: bash
+        env:
+          GEMINI_MR7_VERSION_API_KEY: ${{ secrets.GEMINI_MR7_VERSION_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${GEMINI_MR7_VERSION_API_KEY:-}" ]]; then
+            echo "::error::Missing repository secret GEMINI_MR7_VERSION_API_KEY."
+            exit 1
+          fi
+
+          umask 077
+          printf 'GEMINI_MR7_VERSION_API_KEY=%s\n' "$GEMINI_MR7_VERSION_API_KEY" > project/.env
+          printf 'GEMINI_MR7_VERSION_API_=%s\n' "$GEMINI_MR7_VERSION_API_KEY" >> project/.env
+          printf 'GEMINI_API_KEY=%s\n' "$GEMINI_MR7_VERSION_API_KEY" >> project/.env
+          chmod 600 project/.env
+
       - name: Create debug signing key
         shell: bash
         run: |
